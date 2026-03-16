@@ -1,17 +1,14 @@
 from __future__ import annotations
-import base64
-import logging
-import time
 
 import asyncio
+import base64
 import copy
 import datetime
 import io
 import json
 import os
-from pathlib import Path
-import uuid
 import platform
+import uuid
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
@@ -27,7 +24,6 @@ from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContex
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.astr_main_agent_resources import (
     ANNOTATE_EXECUTION_TOOL,
     BROWSER_BATCH_EXEC_TOOL,
@@ -76,6 +72,7 @@ from astrbot.core.tools.cron_tools import (
     DELETE_CRON_JOB_TOOL,
     LIST_CRON_JOBS_TOOL,
 )
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
 from astrbot.core.utils.quoted_message.settings import (
@@ -1251,14 +1248,14 @@ async def build_main_agent(
 
 def _do_compress_sync(data: bytes, temp_dir: str) -> str:
     """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
-    
+
     img = PILImage.open(io.BytesIO(data))
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
     max_size = 1280
     if max(img.size) > max_size:
         img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
-    
+
     new_uuid = uuid.uuid4().hex
     save_path = os.path.join(temp_dir, f"compressed_{new_uuid}.jpg")
     img.save(save_path, "JPEG", quality=85, optimize=True)
