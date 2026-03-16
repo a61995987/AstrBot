@@ -9,7 +9,6 @@ import datetime
 import io
 import json
 import os
-from pathlib import Path
 import uuid
 import platform
 import zoneinfo
@@ -27,7 +26,6 @@ from astrbot.core.astr_agent_context import AgentContextWrapper, AstrAgentContex
 from astrbot.core.astr_agent_hooks import MAIN_AGENT_HOOKS
 from astrbot.core.astr_agent_run_util import AgentRunner
 from astrbot.core.astr_agent_tool_exec import FunctionToolExecutor
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.astr_main_agent_resources import (
     ANNOTATE_EXECUTION_TOOL,
     BROWSER_BATCH_EXEC_TOOL,
@@ -147,8 +145,6 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
-    image_compress_enabled: bool = True
-    """Whether to enable image compression."""
 
 
 @dataclass(slots=True)
@@ -498,7 +494,7 @@ async def _ensure_img_caption(
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
-            [await _compress_image_internal(url, cfg.get("provider_settings", {}).get("image_compress_enabled", True)) for url in req.image_urls],
+            [await _compress_image_internal(url) for url in req.image_urls],
             plugin_context,
         )
         if caption:
@@ -574,12 +570,12 @@ async def _process_quote_message(
                 prov = plugin_context.get_using_provider(event.unified_msg_origin)
 
             if prov and isinstance(prov, Provider):
-                path = await image_seg.convert_to_file_path()
-                image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
                 llm_resp = await prov.text_chat(
                     prompt="Please describe the image content.",
                     image_urls=[
-                        image_path
+                        await _compress_image_internal(
+                            await image_seg.convert_to_file_path()
+                        )
                     ],
                 )
                 if llm_resp.completion_text:
@@ -1048,8 +1044,9 @@ async def build_main_agent(
             # media files attachments
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
-                    path = await comp.convert_to_file_path()
-                    image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
+                    image_path = await _compress_image_internal(
+                            await comp.convert_to_file_path()
+                        )
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -1076,8 +1073,9 @@ async def build_main_agent(
                     for reply_comp in comp.chain:
                         if isinstance(reply_comp, Image):
                             has_embedded_image = True
-                            path = await reply_comp.convert_to_file_path()
-                            image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
+                            image_path = await _compress_image_internal(
+                                await reply_comp.convert_to_file_path()
+                            )
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):
@@ -1259,18 +1257,14 @@ def _do_compress_sync(data: bytes, temp_dir: str) -> str:
     if max(img.size) > max_size:
         img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
     
-    new_uuid = uuid.uuid4().hex
-    save_path = os.path.join(temp_dir, f"compressed_{new_uuid}.jpg")
+    timestamp = int(time.time() * 1000)
+    save_path = os.path.join(temp_dir, f"compressed_{timestamp}.jpg")
     img.save(save_path, "JPEG", quality=85, optimize=True)
     return save_path
 
 
 # 压缩用户上传的大体积图片 未来可以提取为通用工具
-async def _compress_image_internal(url_or_path: str, enabled: bool = True) -> str:
-    if not enabled:
-        logger.warning("未启用图像压缩")
-        return url_or_path
-    logger.warning("已启用图像压缩")
+async def _compress_image_internal(url_or_path: str) -> str:
     try:
         data = None
         # 若为远程图片则直接返回原值 无需压缩
@@ -1288,11 +1282,11 @@ async def _compress_image_internal(url_or_path: str, enabled: bool = True) -> st
         if not data:
             return url_or_path
 
-        temp_dir = get_astrbot_temp_path()
+        temp_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data/temp")
         os.makedirs(temp_dir, exist_ok=True)
 
         # 使用 asyncio.to_thread 将同步阻塞的图片处理任务交给线程池
-        return await asyncio.to_thread(_do_compress_sync, data, str(temp_dir))
+        return await asyncio.to_thread(_do_compress_sync, data, temp_dir)
 
     except Exception as e:
         logger.error("图片压缩失败: %s", e)

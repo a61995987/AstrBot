@@ -63,3 +63,4 @@ GenieData/
 .kilocode/
 .worktrees/
 
+\n# Custom ignored files\n*.bak\ndata/

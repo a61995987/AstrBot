@@ -498,7 +498,7 @@ async def _ensure_img_caption(
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
-            [await _compress_image_internal(url, cfg.get("provider_settings", {}).get("image_compress_enabled", True)) for url in req.image_urls],
+            [await _compress_image_internal(url, cfg.get("image_compress_enabled", True)) for url in req.image_urls],
             plugin_context,
         )
         if caption:
@@ -575,7 +575,7 @@ async def _process_quote_message(
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
-                image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
+                image_path = await _compress_image_internal(path, config.image_compress_enabled)
                 llm_resp = await prov.text_chat(
                     prompt="Please describe the image content.",
                     image_urls=[
@@ -1049,7 +1049,7 @@ async def build_main_agent(
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     path = await comp.convert_to_file_path()
-                    image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
+                    image_path = await _compress_image_internal(path, config.image_compress_enabled)
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -1077,7 +1077,7 @@ async def build_main_agent(
                         if isinstance(reply_comp, Image):
                             has_embedded_image = True
                             path = await reply_comp.convert_to_file_path()
-                            image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
+                            image_path = await _compress_image_internal(path, config.image_compress_enabled)
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):

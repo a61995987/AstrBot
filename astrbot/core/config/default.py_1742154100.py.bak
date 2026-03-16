@@ -116,7 +116,6 @@ DEFAULT_CONFIG = {
         "deerflow_agent_runner_provider_id": "",
         "unsupported_streaming_strategy": "realtime_segmenting",
         "reachability_check": False,
-        "image_compress_enabled": True,
         "max_agent_step": 30,
         "tool_call_timeout": 60,
         "tool_schema_mode": "full",
@@ -3286,14 +3285,6 @@ CONFIG_METADATA_3 = {
                         "description": "按模型能力清理历史上下文",
                         "type": "bool",
                         "hint": "开启后，在每次请求 LLM 前会按当前模型提供商中所选择的模型能力删除对话中不支持的图片/工具调用结构（会改变模型看到的历史）",
-                        "condition": {
-                            "provider_settings.agent_runner_type": "local",
-                        },
-                    },
-                    "provider_settings.image_compress_enabled": {
-                        "description": "启用图片压缩",
-                        "type": "bool",
-                        "hint": "启用后，主消息及引用消息中的图片在发送给 LLM 前会被压缩以节省带宽并提高速度。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
