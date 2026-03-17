@@ -144,8 +144,6 @@ class MainAgentBuildConfig:
     timezone: str | None = None
     max_quoted_fallback_images: int = 20
     """Maximum number of images injected from quoted-message fallback extraction."""
-    image_compress_enabled: bool = True
-    """Whether to enable image compression."""
 
 
 @dataclass(slots=True)
