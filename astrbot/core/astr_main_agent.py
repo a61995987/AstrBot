@@ -1,19 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import copy
 import datetime
-import io
 import json
 import os
 import platform
-import uuid
 import zoneinfo
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
-
-from PIL import Image as PILImage
 
 from astrbot.core import logger
 from astrbot.core.agent.handoff import HandoffTool
@@ -72,9 +67,9 @@ from astrbot.core.tools.cron_tools import (
     DELETE_CRON_JOB_TOOL,
     LIST_CRON_JOBS_TOOL,
 )
-from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 from astrbot.core.utils.file_extract import extract_file_moonshotai
 from astrbot.core.utils.llm_metadata import LLM_METADATAS
+from astrbot.core.utils.media_utils import compress_image
 from astrbot.core.utils.quoted_message.settings import (
     SETTINGS as DEFAULT_QUOTED_MESSAGE_SETTINGS,
 )
@@ -493,7 +488,7 @@ async def _ensure_img_caption(
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
-            [await _compress_image_internal(url, cfg) for url in req.image_urls],
+            [await compress_image(url, cfg) for url in req.image_urls],
             plugin_context,
         )
         if caption:
@@ -571,7 +566,7 @@ async def _process_quote_message(
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
-                image_path = await _compress_image_internal(
+                image_path = await compress_image(
                     path, config.provider_settings if config else None
                 )
                 llm_resp = await prov.text_chat(
@@ -1046,9 +1041,7 @@ async def build_main_agent(
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     path = await comp.convert_to_file_path()
-                    image_path = await _compress_image_internal(
-                        path, config.provider_settings
-                    )
+                    image_path = await compress_image(path, config.provider_settings)
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -1076,7 +1069,7 @@ async def build_main_agent(
                         if isinstance(reply_comp, Image):
                             has_embedded_image = True
                             path = await reply_comp.convert_to_file_path()
-                            image_path = await _compress_image_internal(
+                            image_path = await compress_image(
                                 path, config.provider_settings
                             )
                             req.image_urls.append(image_path)
@@ -1246,58 +1239,3 @@ async def build_main_agent(
         provider=provider,
         reset_coro=reset_coro if not apply_reset else None,
     )
-
-def _do_compress_sync(data: bytes, temp_dir: str) -> str:
-    """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
-
-    img = PILImage.open(io.BytesIO(data))
-    if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")
-    max_size = 1280
-    if max(img.size) > max_size:
-        img.thumbnail((max_size, max_size), PILImage.Resampling.LANCZOS)
-
-    new_uuid = uuid.uuid4().hex
-    save_path = os.path.join(temp_dir, f"compressed_{new_uuid}.jpg")
-    img.save(save_path, "JPEG", quality=85, optimize=True)
-    return save_path
-
-
-# 压缩用户上传的大体积图片 未来可以提取为通用工具
-async def _compress_image_internal(
-    url_or_path: str, provider_settings: dict | None = None
-) -> str:
-    # 从 provider_settings 获取 image_compress_enabled，默认为 True
-    enabled = True
-    if provider_settings:
-        enabled = provider_settings.get("image_compress_enabled", True)
-    if not enabled:
-        logger.warning("未启用图像压缩")
-        return url_or_path
-    logger.warning("已启用图像压缩")
-    try:
-        data = None
-        # 若为远程图片则直接返回原值 无需压缩
-        if url_or_path.startswith("http"):
-            return url_or_path
-        elif url_or_path.startswith("data:image"):
-            header, encoded = url_or_path.split(",", 1)
-            data = base64.b64decode(encoded)
-        elif os.path.exists(url_or_path):
-            if os.path.getsize(url_or_path) < 1024 * 1024:
-                return url_or_path
-            with open(url_or_path, "rb") as f:
-                data = f.read()
-
-        if not data:
-            return url_or_path
-
-        temp_dir = get_astrbot_temp_path()
-        os.makedirs(temp_dir, exist_ok=True)
-
-        # 使用 asyncio.to_thread 将同步阻塞的图片处理任务交给线程池
-        return await asyncio.to_thread(_do_compress_sync, data, str(temp_dir))
-
-    except Exception as e:
-        logger.error("图片压缩失败: %s", e)
-        return url_or_path
