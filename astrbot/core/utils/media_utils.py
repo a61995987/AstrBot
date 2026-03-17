@@ -326,8 +326,7 @@ async def extract_video_cover(
 
 
 def _compress_image_sync(data: bytes, temp_dir: str) -> str:
-    """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
-
+    """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""    
     img = PILImage.open(io.BytesIO(data))
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
@@ -338,6 +337,7 @@ def _compress_image_sync(data: bytes, temp_dir: str) -> str:
     new_uuid = uuid.uuid4().hex
     save_path = os.path.join(temp_dir, f"compressed_{new_uuid}.jpg")
     img.save(save_path, "JPEG", quality=85, optimize=True)
+    logger.info(f"图片压缩成功:{save_path}")
     return save_path
 
 
@@ -358,7 +358,7 @@ async def compress_image(
     if provider_settings:
         enabled = provider_settings.get("image_compress_enabled", True)
     if not enabled:
-        logger.info("未启用图像压缩")
+        logger.info("未启用图像压缩 跳过压缩阶段")
         return url_or_path
     logger.info("已启用图像压缩")
     try:
