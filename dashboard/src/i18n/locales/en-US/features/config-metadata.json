@@ -341,7 +341,7 @@
                 },
                 "image_compress_enabled": {
                     "description": "Enable Image Compression",
-                    "hint": "When enabled, images in main messages and quoted messages will be compressed before being sent to the LLM to save bandwidth and improve speed."
+                    "hint": "When enabled, images in main messages and quoted messages will be compressed before being sent to the LLM to avoid 413 errors from model providers."
                 }
             },
             "provider_tts_settings": {

@@ -495,7 +495,7 @@ async def _ensure_img_caption(
         caption = await _request_img_caption(
             image_caption_provider,
             cfg,
-            [await _compress_image_internal(url, cfg.get("provider_settings", {}).get("image_compress_enabled", True)) for url in req.image_urls],
+            [await _compress_image_internal(url, cfg) for url in req.image_urls],
             plugin_context,
         )
         if caption:
@@ -533,6 +533,7 @@ async def _process_quote_message(
     img_cap_prov_id: str,
     plugin_context: Context,
     quoted_message_settings: QuotedMessageParserSettings = DEFAULT_QUOTED_MESSAGE_SETTINGS,
+    config: MainAgentBuildConfig | None = None,
 ) -> None:
     quote = None
     for comp in event.message_obj.message:
@@ -572,12 +573,12 @@ async def _process_quote_message(
 
             if prov and isinstance(prov, Provider):
                 path = await image_seg.convert_to_file_path()
-                image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
+                image_path = await _compress_image_internal(
+                    path, config.provider_settings if config else None
+                )
                 llm_resp = await prov.text_chat(
                     prompt="Please describe the image content.",
-                    image_urls=[
-                        image_path
-                    ],
+                    image_urls=[image_path],
                 )
                 if llm_resp.completion_text:
                     content_parts.append(
@@ -669,6 +670,7 @@ async def _decorate_llm_request(
         img_cap_prov_id,
         plugin_context,
         quoted_message_settings,
+        config,
     )
 
     tz = config.timezone
@@ -1046,7 +1048,9 @@ async def build_main_agent(
             for comp in event.message_obj.message:
                 if isinstance(comp, Image):
                     path = await comp.convert_to_file_path()
-                    image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
+                    image_path = await _compress_image_internal(
+                        path, config.provider_settings
+                    )
                     req.image_urls.append(image_path)
                     req.extra_user_content_parts.append(
                         TextPart(text=f"[Image Attachment: path {image_path}]")
@@ -1074,7 +1078,9 @@ async def build_main_agent(
                         if isinstance(reply_comp, Image):
                             has_embedded_image = True
                             path = await reply_comp.convert_to_file_path()
-                            image_path = await _compress_image_internal(path, config.provider_settings.get("image_compress_enabled", True))
+                            image_path = await _compress_image_internal(
+                                path, config.provider_settings
+                            )
                             req.image_urls.append(image_path)
                             _append_quoted_image_attachment(req, image_path)
                         elif isinstance(reply_comp, File):
@@ -1243,9 +1249,6 @@ async def build_main_agent(
         reset_coro=reset_coro if not apply_reset else None,
     )
 
-
-# 压缩用户上传的大体积图片 未来可以提取为通用工具
-
 def _do_compress_sync(data: bytes, temp_dir: str) -> str:
     """同步执行图片压缩逻辑，由 asyncio.to_thread 调用"""
 
@@ -1263,7 +1266,13 @@ def _do_compress_sync(data: bytes, temp_dir: str) -> str:
 
 
 # 压缩用户上传的大体积图片 未来可以提取为通用工具
-async def _compress_image_internal(url_or_path: str, enabled: bool = True) -> str:
+async def _compress_image_internal(
+    url_or_path: str, provider_settings: dict | None = None
+) -> str:
+    # 从 provider_settings 获取 image_compress_enabled，默认为 True
+    enabled = True
+    if provider_settings:
+        enabled = provider_settings.get("image_compress_enabled", True)
     if not enabled:
         logger.warning("未启用图像压缩")
         return url_or_path

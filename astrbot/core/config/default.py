@@ -3293,7 +3293,7 @@ CONFIG_METADATA_3 = {
                     "provider_settings.image_compress_enabled": {
                         "description": "启用图片压缩",
                         "type": "bool",
-                        "hint": "启用后，主消息及引用消息中的图片在发送给 LLM 前会被压缩以节省带宽并提高速度。",
+                        "hint": "启用后，主消息及引用消息中的图片在发送给 LLM 前会被压缩以节以避免模型提供商返回413错误。",
                         "condition": {
                             "provider_settings.agent_runner_type": "local",
                         },
